@@ -17,7 +17,6 @@ from functools import partial
 import multiprocessing
 import hppy as hy
 
-
 run_settings = None
 uds_settings = None
 
@@ -356,6 +355,7 @@ def build_a_network(extra_arguments = None):
         run_settings.input = [sys.stdin]
     else:
         try:
+            run_settings.input_fn = run_settings.input
             run_settings.input = [open(file, 'r') for file in run_settings.input]
         except IOError:
             print("Failed to open '%s' for reading" % (run_settings.input), file=sys.stderr)
@@ -403,20 +403,20 @@ def build_a_network(extra_arguments = None):
             raise
 
     formatter = []
-    
+
 
 
     if run_settings.format is not None:
         regExpByIndex = {}
-        
+
         if run_settings.parser is not None:
             for patterns in run_settings.parser :
                 idx = int (patterns[0])
                 if not idx in regExpByIndex:
                     regExpByIndex[idx] = []
                 regExpByIndex[idx].append (patterns[1])
-                
-    
+
+
         for index, format_k in enumerate (run_settings.format):
             formats = {"AEH": parseAEH, "LANL": parseLANL, "plain": parsePlain, "regexp": parseRegExp(
                 None if run_settings.parser is None  or index not in regExpByIndex else [re.compile (r) for r in regExpByIndex[index]])}
@@ -591,7 +591,7 @@ def build_a_network(extra_arguments = None):
             supported_triangles = set ()
 
             for filtering_pass in range (8):
-                edge_stats = network.test_edge_support(referenced_sequence_data, *network.find_all_simple_cycles(edge_set, maximum_number = maximum_number, ignore_this_set = supported_triangles), supported_cycles = supported_triangles)
+                edge_stats = network.test_edge_support(referenced_sequence_data, *network.find_all_simple_cycles(edge_set, maximum_number = maximum_number, ignore_this_set = supported_triangles), supported_cycles = supported_triangles, settings = run_settings)
                 if not edge_stats:
                     break
                 else:

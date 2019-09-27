@@ -35,6 +35,7 @@ function _testNetworkTriangle (filter, efv, seq1, seq2, seq3) {
     // stash all MLEs
 
     GetString (_lfInfo,L3,-1);
+    fprintf(stdout, full);
     MLE_stash = {};
 
 	_paramList = _lfInfo["Global Independent"];
@@ -64,6 +65,7 @@ function _testNetworkTriangle (filter, efv, seq1, seq2, seq3) {
             // set branch constraint
             ExecuteCommands ("ReplicateConstraint (\"this1.?:=0\",T3." + (b+1) + ");");
             Optimize (constrained, L3);
+            fprintf(stdout, constrained);
             p_values[b] = 0.5*(1-CChi2 (2*(full[1][0]-constrained[1][0]), 1));
         } else {
             p_values [b] = 0.5;

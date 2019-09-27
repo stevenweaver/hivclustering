@@ -15,8 +15,10 @@ import hppy as hy
 import os
 import csv
 import multiprocessing
+import math
 from functools import partial, lru_cache, cmp_to_key
 import collections
+from hivclustering import ll
 
 __all__ = ['edge', 'patient', 'transmission_network', 'parseAEH', 'parseLANL',
            'parsePlain', 'parseRegExp', 'describe_vector', 'tm_to_datetime', 'datetime_to_tm', ]
@@ -43,8 +45,8 @@ def parseAEH(str, position = None):
 def parseRegExp(regexp):
     def parseHeader(str, position = None):
         patient_description = {}
- 
-        for r in [regexp[position]] if position is not None else regexp:        
+
+        for r in [regexp[position]] if position is not None else regexp:
             try:
                 patient_description['date'] = None
                 patient_description['rawid'] = str
@@ -58,13 +60,13 @@ def parseRegExp(regexp):
                         try:
                             patient_description['date'] = time.strptime(groups[1], pattern)
                         except ValueError:
-                            continue 
+                            continue
                 parseSuccess = True
                 break
-                
+
             except:
                 pass
-        
+
         if not parseSuccess:
             print("Warning: could not parse the following ID as the reg.exp. header: %s" % str, file = sys.stderr)
             patient_description['id'] = str
@@ -140,6 +142,7 @@ def _test_edge_support(cycles, sequence_records, hy_instance, p_value_cutoff, te
 
 
     seq_dump = '\n'.join (['>%s\n%s' % (id, sequence_records[id]) for id in referenced_sequences])
+
     hbl_path = os.path.join(os.path.dirname(script_path), "data", "HBL", "CycleSupport.bf" if test_quads else "TriangleSupport.bf")
 
 
@@ -151,6 +154,7 @@ def _test_edge_support(cycles, sequence_records, hy_instance, p_value_cutoff, te
     if len(hy_instance.stderr):
         raise RuntimeError(hy_instance.stderr)
 
+    print(hy_instance.stdout)
     return_object = []  # ((triangle), (p-values))
 
     for k, t in enumerate(cycles):
@@ -159,7 +163,28 @@ def _test_edge_support(cycles, sequence_records, hy_instance, p_value_cutoff, te
     #print (return_object)
     return return_object
 
-#[node.sequence,sim_matrix,hy_instance,index_to_node_id]
+
+## Calculate JC69 distances per each rooted tree
+
+def _test_edge_support_simple(cycles, sequence_records, hy_instance, p_value_cutoff, test_quads):
+
+    #perms = list(itertools.permutations(cycles[0][:3], 3))
+    #test = []
+    #[test.append(x) for x in perms if x not in test and tuple(reversed(x)) not in test]
+
+    pairwise = list(map(lambda cycle : list(map(lambda x: (x, ll.jc69_distance(sequence_records[x[0]], sequence_records[x[1]])), itertools.combinations(cycle[:3], 2))), cycles))
+
+    # Get jc-69 for all configurations
+    # [(A -> B -> C), (B -> A -> C), (A -> C -> B)]
+    #map(lambda x: , )
+
+    ## Calculate JC69 distances per each rooted tree
+
+    return_object = []  # ((triangle), (p-values))
+
+    #print (return_object)
+    return return_object
+
 
 
 def _batch_sequence_sim(spec):
@@ -1639,7 +1664,7 @@ class transmission_network:
                     stashed_filtered.append (cdata)
                 else:
                     stashed_unfiltered [cid] = cdata
-                    
+
 
             clusters = sorted (stashed_filtered, key = cmp_to_key (cmp_clusters))
         else:
@@ -2284,13 +2309,19 @@ class transmission_network:
         helper(cluster[0])
         return len(visited) != len(cluster)
 
-    def test_edge_support(self, sequence_records, cycles, adjacency_set, hy_instance=None, p_value_cutoff=0.05, edge_subset = None, supported_cycles = None, test_quads = False):
+    def test_edge_support(self, sequence_records, cycles, adjacency_set, hy_instance=None, p_value_cutoff=0.05, edge_subset = None, supported_cycles = None, test_quads = False, settings = None):
 
         if len(cycles) == 0:
             return None
 
+        # evaluator = partial(_test_edge_support, sequence_records=sequence_records,
+        #                     hy_instance=hy_instance, p_value_cutoff=p_value_cutoff, test_quads = test_quads)
+
         evaluator = partial(_test_edge_support, sequence_records=sequence_records,
                             hy_instance=hy_instance, p_value_cutoff=p_value_cutoff, test_quads = test_quads)
+
+        evaluator(cycles[:1])
+
         #processed_objects = evaluator (cycles)
 
         chunk = 2**(max(floor(log(len(cycles) / multiprocessing.cpu_count(), 2)), 8))
@@ -2337,6 +2368,21 @@ class transmission_network:
             # if there are two or more edges that are unsupported at the same level
             # then keep them all, and mark them as bridges
             # resolving them would introduce false signal
+
+            ## CSV - seq_name_1, seq_name_2, seq_name_3, seq_1, seq_2, seq_3, p_val_0_1, p_val_0_2, p_val_1_2
+            with open("_".join(settings.input_fn) + "_" + str(os.getpid()) + '_edge_dump.csv', 'a', newline='') as csvfile:
+                fieldnames = ['first_name', 'last_name']
+                writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
+                writer.writerow(["seq_name_1", "seq_name_2", "seq_name_3", "p_val_0_1", "p_val_0_2", "p_val_1_2"])
+
+                def get_row(obj):
+                    # seq_names
+                    row = list(obj[0][:3])
+                    # pvals
+                    row += list(obj[1][:3])
+                    return row
+
+                writer.writerows(map(get_row, processed_objects))
 
             max_p = max (p_values)
 
